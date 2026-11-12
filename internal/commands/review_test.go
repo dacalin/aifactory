@@ -3,6 +3,7 @@ package commands
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -81,8 +82,13 @@ func TestReviewRebuildsGoRunnerAndRejectsBrokenBuild(t *testing.T) {
 	t.Chdir(root)
 	writeReviewFixture(t, root, "factory.yaml", "dir: policy\nrule-agent:\n  dir: checks\n", 0600)
 	writeReviewFixture(t, root, "policy/checks/go.mod", "module example.com/checks\n\ngo 1.25.0\n", 0600)
+	writeReviewFixture(t, root, "policy/checks/main.go", "package main\nfunc main() { println(\"STALE\") }\n", 0600)
+	build := exec.Command("go", "build", "-o", reviewExecutable(), ".")
+	build.Dir = filepath.Join(root, "policy/checks")
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build stale fixture: %s, %v", output, err)
+	}
 	writeReviewFixture(t, root, "policy/checks/main.go", "package main\nimport (\"fmt\"; \"os\")\nfunc main() { fmt.Println(\"PASS current-source\", os.Args[1]) }\n", 0600)
-	writeReviewFixture(t, root, filepath.Join("policy/checks", reviewExecutable()), "#!/bin/sh\necho STALE\nexit 0\n", 0700)
 	output, diagnostics, err := executeReview(t)
 	if err != nil || !strings.Contains(output, "PASS current-source all") || strings.Contains(output, "STALE") {
 		t.Fatalf("rebuild: %q, %q, %v", output, diagnostics, err)
