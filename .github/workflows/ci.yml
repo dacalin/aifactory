@@ -1,0 +1,31 @@
+name: CI
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            extension: ''
+          - os: macos-latest
+            extension: ''
+          - os: windows-latest
+            extension: '.exe'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+      - run: go test ./...
+      - run: go vet ./...
+      - run: go -C .ai-factory/rules test ./...
+      - run: go -C .ai-factory/rules build -o checkrules${{ matrix.extension }} .
+      - run: ./.ai-factory/rules/checkrules${{ matrix.extension }} --root . all

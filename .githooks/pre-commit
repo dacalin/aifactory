@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+PROJECT_DIR=$(git rev-parse --show-toplevel)
+mkdir -p "$PROJECT_DIR/.ai-factory/.tmp"
+CHECK_TMP=$(mktemp -d "$PROJECT_DIR/.ai-factory/.tmp/pre-commit.XXXXXX")
+trap 'rm -rf "$CHECK_TMP"' EXIT HUP INT TERM
+export TMPDIR="$CHECK_TMP"
+(cd "$PROJECT_DIR/.ai-factory/rules" && go build -o checkrules .)
+"$PROJECT_DIR/.ai-factory/rules/checkrules" --root "$PROJECT_DIR" all

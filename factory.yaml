@@ -1,0 +1,25 @@
+# Prompts are read from dir/prompts; init creates missing default prompts.
+dir: .ai-factory/
+
+rule-agent:
+  # Rule files go under dir/rules by default; this path is relative to dir.
+  # dir: rules
+  agent: codex # codex or claude
+
+  # Optional model ID for the selected agent; omit to use its CLI default.
+  # model: your-model-id
+
+  # Optional reasoning effort; omit to use the CLI default.
+  # Supported levels depend on the selected provider and model.
+  # effort: high
+
+  # Languages the agent may use for custom checker logic.
+  # Choose the simplest suitable option and verify its runtime is available.
+  # Compiled checks share a binary in the rule directory; interpreted checks use their runtime.
+  checker_languages: [go]
+
+  # Commands the rule agent can use. Each entry lists an executable and arguments.
+  tools:
+    go_list: [go, list]
+    go_run: [go, run]
+    gocognit: [go, run, "github.com/uudashr/gocognit/cmd/gocognit@v1.2.2"]
