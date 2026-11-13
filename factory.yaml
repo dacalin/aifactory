@@ -23,3 +23,9 @@ rule-agent:
     go_list: [go, list]
     go_run: [go, run]
     gocognit: [go, run, "github.com/uudashr/gocognit/cmd/gocognit@v1.2.2"]
+
+# Build and run the single checker entry point from the configured rule directory.
+# Each command is an executable followed by arguments; no shell parsing is used.
+checks:
+  build: [go, build, -o, checkrules, .]
+  run: [./checkrules]

@@ -1,6 +1,6 @@
 .ai-factory/rules/checkrules
-.ai-factory/rules/checkrules.exe
 .ai-factory/.tmp/
 
 # Release archives are published as GitHub release assets.
 /dist/
+/bin/

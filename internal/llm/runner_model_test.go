@@ -3,7 +3,6 @@ package llm
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -12,9 +11,6 @@ import (
 )
 
 func TestRunnerModelAndEffortSelection(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("POSIX executable fixtures; stream parsing is tested separately")
-	}
 	for _, provider := range []struct {
 		name      string
 		newRunner func(string, string) agents.AgentRunner

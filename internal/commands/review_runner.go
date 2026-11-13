@@ -6,7 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
+	"strings"
 
 	"github.com/dacalin/aifactory/internal/config"
 
@@ -22,31 +22,11 @@ func runReview(command *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	rules := filepath.Join(root, cfg.RulesDir())
-	runner := filepath.Join(rules, reviewExecutable())
-	// Rebuild Go checks from this checkout; ignored binaries may be stale or absent.
-	if _, err := os.Stat(filepath.Join(rules, "go.mod")); err == nil {
-		if err := buildReviewRunner(command, cfg, rules, runner); err != nil {
-			return err
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
+	commands := cfg.Checks
+	if len(commands.Run) == 0 {
+		return fmt.Errorf("checks.run is not configured in factory.yaml; ask RuleAgent to configure the shared checker")
 	}
-	if _, err := os.Stat(runner); err != nil {
-		return fmt.Errorf("rule runner unavailable at %s; create a rule or build its shared checkrules entry point: %w", runner, err)
-	}
-	process := exec.CommandContext(command.Context(), runner, args...)
-	process.Dir = root
-	process.Stdout = command.OutOrStdout()
-	process.Stderr = command.ErrOrStderr()
-	if err := process.Run(); err != nil {
-		return fmt.Errorf("rule review failed: %w", err)
-	}
-	return nil
-}
-
-func buildReviewRunner(command *cobra.Command, cfg config.Factory, rules, runner string) error {
-	workspace := filepath.Join(cfg.ProjectDir, cfg.TemporaryDir())
+	workspace := filepath.Join(root, cfg.TemporaryDir())
 	if err := os.MkdirAll(workspace, 0755); err != nil {
 		return err
 	}
@@ -55,15 +35,30 @@ func buildReviewRunner(command *cobra.Command, cfg config.Factory, rules, runner
 		return err
 	}
 	defer os.RemoveAll(temporary)
-	process := exec.CommandContext(command.Context(), "go", "build", "-o", runner, ".")
-	process.Dir = rules
-	process.Env = append(os.Environ(), "TMPDIR="+temporary)
-	process.Stdout = command.OutOrStdout()
-	process.Stderr = command.ErrOrStderr()
-	if err := process.Run(); err != nil {
-		return fmt.Errorf("build current worktree's rule runner: %w", err)
+	if len(commands.Build) > 0 {
+		if err := executeChecker(command, cfg, commands.Build, nil, temporary); err != nil {
+			return fmt.Errorf("build configured checker: %w", err)
+		}
+	}
+	if err := executeChecker(command, cfg, commands.Run, args, temporary); err != nil {
+		return fmt.Errorf("rule review failed: %w", err)
 	}
 	return nil
+}
+
+func executeChecker(command *cobra.Command, cfg config.Factory, argv, args []string, temporary string) error {
+	rules := filepath.Join(cfg.ProjectDir, cfg.RulesDir())
+	program := argv[0]
+	if !filepath.IsAbs(program) && strings.ContainsRune(program, '/') {
+		program = filepath.Join(rules, program)
+	}
+	arguments := append(append([]string{}, argv[1:]...), args...)
+	process := exec.CommandContext(command.Context(), program, arguments...)
+	process.Dir = rules
+	process.Env = append(os.Environ(), "TMPDIR="+temporary, "AIFACTORY_PROJECT_DIR="+cfg.ProjectDir)
+	process.Stdout = command.OutOrStdout()
+	process.Stderr = command.ErrOrStderr()
+	return process.Run()
 }
 
 func reviewProjectDir() (string, error) {
@@ -90,11 +85,4 @@ func reviewProjectDir() (string, error) {
 		directory = parent
 	}
 	return "", fmt.Errorf("factory.yaml not found in this project/worktree; run aifactory init at its root")
-}
-
-func reviewExecutable() string {
-	if runtime.GOOS == "windows" {
-		return "checkrules.exe"
-	}
-	return "checkrules"
 }

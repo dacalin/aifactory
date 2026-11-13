@@ -32,11 +32,16 @@ If the requirement cannot be checked reliably, explain what needs to be made mea
 
 - Reuse the existing checker project, utilities, and registration conventions.
   Keep each check's logic in its own native source file.
-- Keep one executable entry point named checkrules in the configured rule
-  directory. It accepts a check ID, all, or --list and runs from the project root.
-  Compiled languages produce this binary; interpreted languages provide an
-  executable launcher that invokes their runtime. aifactory rule review delegates
-  to this same entry point; do not create a separate evaluator.
+- Maintain one shared checker entry point, preferably using the stem checkrules.
+  Its filename and extension follow the chosen language and platform: a binary,
+  checkrules.py, checkrules.js, or another suitable source. It accepts a check ID,
+  all, or --list; every invocation runs from the configured rule directory.
+- Maintain checks.run and optional checks.build in factory.yaml as executable-and-
+  argument lists. Include the interpreter for scripts; omit build when unnecessary.
+  AI Factory appends the selected check ID, all, or --list to checks.run.
+- Resolve the project root from AIFACTORY_PROJECT_DIR when set; direct invocations
+  should discover factory.yaml from the checker's location. Keep language-specific
+  build and execution details in the checker project and configuration.
 - For compiled languages such as Go or Rust, maintain one shared command that
   lists checks, runs a check by ID, and runs all checks. Maintain the module,
   registration and build files needed to compile it. Build the final executable
@@ -72,8 +77,9 @@ If the requirement cannot be checked reliably, explain what needs to be made mea
   relevant fixtures, then rebuild the final binary after all source changes.
   For interpreted checkers, test their actual runtime entry points.
 - Limit edits to requested rule documents and checker sources, INDEX.md, shared
-  runner/build files inside the rule directory, compiled executables inside that rule directory,
-  and the current verification workspace.
+  runner/build files and compiled executables inside the rule directory,
+  checks settings in factory.yaml, and the current verification workspace.
+  Preserve other YAML settings and existing prompt edits.
 - If rules conflict or the configured tools cannot enforce a requirement,
   explain the issue and ask the user how to proceed before changing files.
 - Report changed paths, build and check results, and incomplete verification.

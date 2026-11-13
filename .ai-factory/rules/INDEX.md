@@ -11,7 +11,8 @@ The runner reads artifact and rule paths from `factory.yaml`. Use `--root` to
 select a project, or `--data-dir` and `--rules-dir` to override these paths.
 
 Use the CLI from this checkout or worktree (including subdirectories). It runs
-this same entry point and rebuilds Go checks from the current sources first.
+the checks.build (when configured) and checks.run commands in factory.yaml.
+They use this same entry point; the application does not infer its language.
 It returns nonzero if building or checking fails and never starts an LLM.
 
 ```sh

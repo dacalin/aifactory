@@ -9,7 +9,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const DefaultYAML = `# Prompts are read from dir/prompts; init creates missing default prompts.
+const DefaultYAML = `# RuleAgent configures checks.build and checks.run when creating the shared runner.
+# These command lists run from the rule directory; build is optional.
+# Prompts are read from dir/prompts; init creates missing default prompts.
 dir: .ai-factory/
 
 rule-agent:
@@ -38,6 +40,7 @@ rule-agent:
 
 type Factory struct {
 	Dir        string          `yaml:"dir"`
+	Checks     ChecksConfig    `yaml:"checks,omitempty"`
 	RuleAgent  RuleAgentConfig `yaml:"rule-agent"`
 	ProjectDir string          `yaml:"-"`
 }
@@ -62,6 +65,7 @@ func Load(projectDir string) (Factory, error) {
 	}
 	var raw struct {
 		Dir              string              `yaml:"dir"`
+		Checks           ChecksConfig        `yaml:"checks"`
 		RuleAgent        *RuleAgentConfig    `yaml:"rule-agent"`
 		RulesDir         *string             `yaml:"rules_dir"`
 		CheckerLanguages []string            `yaml:"checker_languages"`
@@ -74,9 +78,14 @@ func Load(projectDir string) (Factory, error) {
 		if raw.Dir != "" || raw.RuleAgent != nil {
 			return Factory{}, fmt.Errorf("factory.yaml: use either rules_dir or dir with rule-agent")
 		}
-		return legacyFactory(dir, *raw.RulesDir, raw.CheckerLanguages, raw.Tools)
+		cfg, err := legacyFactory(dir, *raw.RulesDir, raw.CheckerLanguages, raw.Tools)
+		if err != nil {
+			return cfg, err
+		}
+		cfg.Checks = raw.Checks
+		return cfg, cfg.Checks.validate()
 	}
-	cfg := Factory{ProjectDir: dir, Dir: raw.Dir}
+	cfg := Factory{ProjectDir: dir, Dir: raw.Dir, Checks: raw.Checks}
 	if raw.RuleAgent != nil {
 		cfg.RuleAgent = *raw.RuleAgent
 	}
@@ -100,6 +109,9 @@ func legacyFactory(projectDir, rulesDir string, languages []string, tools map[st
 }
 
 func (cfg Factory) normalized() (Factory, error) {
+	if err := cfg.Checks.validate(); err != nil {
+		return Factory{}, err
+	}
 	if cfg.Dir == "" {
 		cfg.Dir = ".ai-factory"
 	}

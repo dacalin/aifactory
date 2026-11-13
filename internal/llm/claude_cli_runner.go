@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/dacalin/aifactory/internal/agents"
@@ -45,10 +46,7 @@ func (runner *ClaudeCLIRunner) Run(projectDir, prompt string, onMessage func(str
 	if runner.sessionID != "" {
 		args = append(args, "--resume", runner.sessionID)
 	}
-	cmd, err := providerCommand("claude", args...)
-	if err != nil {
-		return "", err
-	}
+	cmd := exec.Command("claude", args...)
 	cmd.Dir = dir
 	cmd.Stdin = strings.NewReader(prompt)
 	cmd.Stderr = os.Stderr

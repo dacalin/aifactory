@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -35,13 +34,10 @@ func executeReview(t *testing.T, args ...string) (string, string, error) {
 }
 
 func TestReviewUsesSharedEntryPointInCurrentWorktree(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("POSIX executable fixtures; stream parsing is tested separately")
-	}
 	root := t.TempDir()
-	writeReviewFixture(t, root, "factory.yaml", "dir: policy\nrule-agent:\n  dir: checks\n", 0600)
-	writeReviewFixture(t, root, "policy/checks/checkrules", `#!/bin/sh
-printf 'ROOT:%s\n' "$PWD"
+	writeReviewFixture(t, root, "factory.yaml", "dir: policy\nrule-agent:\n  dir: checks\nchecks:\n  run: [sh, audit.sh]\n", 0600)
+	writeReviewFixture(t, root, "policy/checks/audit.sh", `#!/bin/sh
+printf 'ROOT:%s\n' "$AIFACTORY_PROJECT_DIR"
 case "$1" in
   all) printf 'PASS first\nPASS second\nAll 2 checks passed.\n' ;;
   broken) printf 'FAIL broken\nsource.go:4: violation\nPASS later\n'; printf '1 of 2 checks failed\n' >&2; exit 1 ;;
@@ -80,10 +76,10 @@ esac
 func TestReviewRebuildsGoRunnerAndRejectsBrokenBuild(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)
-	writeReviewFixture(t, root, "factory.yaml", "dir: policy\nrule-agent:\n  dir: checks\n", 0600)
+	writeReviewFixture(t, root, "factory.yaml", "dir: policy\nrule-agent:\n  dir: checks\nchecks:\n  build: [go, build, -o, verify, .]\n  run: [./verify]\n", 0600)
 	writeReviewFixture(t, root, "policy/checks/go.mod", "module example.com/checks\n\ngo 1.25.0\n", 0600)
 	writeReviewFixture(t, root, "policy/checks/main.go", "package main\nfunc main() { println(\"STALE\") }\n", 0600)
-	build := exec.Command("go", "build", "-o", reviewExecutable(), ".")
+	build := exec.Command("go", "build", "-o", "verify", ".")
 	build.Dir = filepath.Join(root, "policy/checks")
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build stale fixture: %s, %v", output, err)
@@ -95,7 +91,7 @@ func TestReviewRebuildsGoRunnerAndRejectsBrokenBuild(t *testing.T) {
 	}
 	writeReviewFixture(t, root, "policy/checks/main.go", "not valid go", 0600)
 	output, _, err = executeReview(t)
-	if err == nil || !strings.Contains(err.Error(), "build current worktree") || strings.Contains(output, "PASS") {
+	if err == nil || !strings.Contains(err.Error(), "build configured checker") || strings.Contains(output, "PASS") {
 		t.Fatalf("ran stale binary after build failure: %q, %v", output, err)
 	}
 	entries, err := os.ReadDir(filepath.Join(root, "policy/.tmp"))
@@ -124,7 +120,7 @@ func TestReviewMissingRunnerAndHelp(t *testing.T) {
 	if err := os.WriteFile("factory.yaml", []byte("dir: policy\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := executeReview(t); err == nil || !strings.Contains(err.Error(), "rule runner unavailable") {
+	if _, _, err := executeReview(t); err == nil || !strings.Contains(err.Error(), "checks.run is not configured") {
 		t.Fatalf("missing runner: %v", err)
 	}
 }

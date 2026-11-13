@@ -4,16 +4,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
 )
 
 func TestRunContinuesTheSameConversation(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("POSIX executable fixtures; stream parsing is tested separately")
-	}
 	dir := t.TempDir()
 	script := `#!/bin/sh
 prompt=$(cat)

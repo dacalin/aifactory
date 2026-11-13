@@ -15,9 +15,11 @@ import (
 
 func newInitCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "init",
-		Short: "Create missing factory.yaml and default prompts",
-		Args:  cobra.NoArgs,
+		Use:     "init",
+		Short:   "Initialize project configuration and editable prompts",
+		Long:    "Create missing factory.yaml and the default RuleAgent prompt in the current\ndirectory. Existing configuration and edited prompts are preserved.\n\nThe prompt is written to <dir>/prompts/rule-agent.md, using dir from\nfactory.yaml (default: .ai-factory). Rerun init to restore a missing prompt.",
+		Example: "  aifactory init",
+		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return initProject(cmd.OutOrStdout())
 		},

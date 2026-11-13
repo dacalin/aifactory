@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 
@@ -43,10 +44,7 @@ func (runner *CodexCLIRunner) Run(projectDir, prompt string, onMessage func(stri
 	} else {
 		args = append(args, "--json", "--skip-git-repo-check", "-")
 	}
-	cmd, err := providerCommand("codex", args...)
-	if err != nil {
-		return "", err
-	}
+	cmd := exec.Command("codex", args...)
 	cmd.Dir = dir
 	cmd.Stdin = strings.NewReader(prompt)
 	cmd.Stderr = os.Stderr
