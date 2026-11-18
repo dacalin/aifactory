@@ -33,9 +33,7 @@ func (runner *ClaudeCLIRunner) Run(projectDir, prompt string, onMessage func(str
 	args := []string{
 		"--print", "--verbose", "--output-format", "stream-json",
 		"--permission-mode", "acceptEdits",
-		"--tools", "Read,Glob,Grep,Edit,Write,Bash",
 		"--allowedTools", "Read,Glob,Grep,Edit,Write,Bash",
-		"--strict-mcp-config", "--mcp-config", "{\"mcpServers\":{}}",
 	}
 	if runner.model != "" {
 		args = append(args, "--model", runner.model)
