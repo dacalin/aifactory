@@ -12,9 +12,14 @@ import (
 
 // Implementation files own one struct; contract files own one interface.
 // Helper-only files are allowed.
-var declarationScopes = []struct{ Root, Kind string }{
-	{"internal/llm", "struct"},
-	{"internal/agents", "interface"},
+type declarationScope struct {
+	Root, Kind  string
+	Descendants bool
+}
+
+var declarationScopes = []declarationScope{
+	{"internal/agents/llm", "struct", true},
+	{"internal/agents", "interface", false},
 }
 
 func init() { register("adapter-port-one-struct", checkFocusedDeclarations) }
@@ -27,7 +32,7 @@ func checkFocusedDeclarations(repo *repository) error {
 	var issues []error
 	for _, file := range files {
 		for _, scope := range declarationScopes {
-			if !within(file.dir, scope.Root) {
+			if !declarationScopeMatches(file.dir, scope) {
 				continue
 			}
 			names := declaredNames(file.tree, scope.Kind)
@@ -40,6 +45,10 @@ func checkFocusedDeclarations(repo *repository) error {
 		}
 	}
 	return errors.Join(issues...)
+}
+
+func declarationScopeMatches(directory string, scope declarationScope) bool {
+	return directory == scope.Root || scope.Descendants && within(directory, scope.Root)
 }
 
 func declaredNames(file *ast.File, kind string) []string {

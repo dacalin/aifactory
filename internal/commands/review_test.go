@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,7 +10,29 @@ import (
 	"testing"
 
 	"github.com/dacalin/aifactory/internal/agents"
+	"github.com/dacalin/aifactory/internal/sandbox"
 )
+
+func requireReviewSandbox(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	cmd, err := sandbox.Command(context.Background(), dir, dir, "/bin/sh", "-c", ":")
+	if err != nil {
+		if strings.Contains(err.Error(), "requires bubblewrap") {
+			t.Skip(err)
+		}
+		t.Fatal(err)
+	}
+	if output, err := cmd.CombinedOutput(); err != nil {
+		message := string(output)
+		if strings.Contains(message, "sandbox_apply: Operation not permitted") ||
+			strings.Contains(message, "No permissions to create a new namespace") ||
+			strings.Contains(message, "Creating new namespace failed: Operation not permitted") {
+			t.Skip(strings.TrimSpace(message))
+		}
+		t.Fatalf("start rule sandbox: %v: %s", err, output)
+	}
+}
 
 func writeReviewFixture(t *testing.T, root, name, content string, mode os.FileMode) {
 	t.Helper()
@@ -24,7 +47,7 @@ func writeReviewFixture(t *testing.T, root, name, content string, mode os.FileMo
 
 func executeReview(t *testing.T, args ...string) (string, string, error) {
 	t.Helper()
-	command := NewRootCommand(func() (agents.Agent, error) { t.Fatal("review constructed an LLM agent"); return nil, nil })
+	command := NewRootCommand(func() (agents.Agent, error) { t.Fatal("review constructed an LLM agent"); return nil, nil }, nil)
 	var output, diagnostics bytes.Buffer
 	command.SetOut(&output)
 	command.SetErr(&diagnostics)
@@ -34,6 +57,7 @@ func executeReview(t *testing.T, args ...string) (string, string, error) {
 }
 
 func TestReviewUsesSharedEntryPointInCurrentWorktree(t *testing.T) {
+	requireReviewSandbox(t)
 	root := t.TempDir()
 	writeReviewFixture(t, root, "factory.yaml", "dir: policy\nrule-agent:\n  dir: checks\nchecks:\n  run: [sh, audit.sh]\n", 0600)
 	writeReviewFixture(t, root, "policy/checks/audit.sh", `#!/bin/sh
@@ -74,6 +98,7 @@ esac
 }
 
 func TestReviewRebuildsGoRunnerAndRejectsBrokenBuild(t *testing.T) {
+	requireReviewSandbox(t)
 	root := t.TempDir()
 	t.Chdir(root)
 	writeReviewFixture(t, root, "factory.yaml", "dir: policy\nrule-agent:\n  dir: checks\nchecks:\n  build: [go, build, -o, verify, .]\n  run: [./verify]\n", 0600)
@@ -94,9 +119,39 @@ func TestReviewRebuildsGoRunnerAndRejectsBrokenBuild(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "build configured checker") || strings.Contains(output, "PASS") {
 		t.Fatalf("ran stale binary after build failure: %q, %v", output, err)
 	}
-	entries, err := os.ReadDir(filepath.Join(root, "policy/.tmp"))
+	entries, err := filepath.Glob(filepath.Join(root, "policy/checks/.tmp/review-*"))
 	if err != nil || len(entries) != 0 {
 		t.Fatalf("temporary build artifacts remain: %v, %v", entries, err)
+	}
+}
+
+func TestReviewSandboxRestrictsCheckerWrites(t *testing.T) {
+	requireReviewSandbox(t)
+	root := t.TempDir()
+	t.Chdir(root)
+	writeReviewFixture(t, root, "factory.yaml", "dir: policy\nrule-agent:\n  dir: checks\nchecks:\n  run: [sh, audit.sh]\n", 0600)
+	writeReviewFixture(t, root, "source.go", "untouched", 0600)
+	writeReviewFixture(t, root, "policy/checks/audit.sh", `#!/bin/sh
+set -eu
+test "$(cat "$AIFACTORY_PROJECT_DIR/source.go")" = untouched
+echo pass > allowed
+echo temp > "$TMPDIR/artifact"
+if sh -c 'echo forbidden > "$1"' sh "$AIFACTORY_PROJECT_DIR/source.go"; then exit 1; fi
+if sh -c 'echo forbidden > "$1"' sh source-link; then exit 1; fi
+if sh -c 'echo forbidden > "$1"' sh ../outside; then exit 1; fi
+`, 0600)
+	rules := filepath.Join(root, "policy/checks")
+	if err := os.Symlink(filepath.Join(root, "source.go"), filepath.Join(rules, "source-link")); err != nil {
+		t.Fatal(err)
+	}
+	if _, diagnostics, err := executeReview(t); err != nil {
+		t.Fatalf("review failed: %v: %s", err, diagnostics)
+	}
+	if content, err := os.ReadFile(filepath.Join(root, "source.go")); err != nil || string(content) != "untouched" {
+		t.Fatalf("source changed: %q, %v", content, err)
+	}
+	if content, err := os.ReadFile(filepath.Join(rules, "allowed")); err != nil || string(content) != "pass\n" {
+		t.Fatalf("expected rule output: %q, %v", content, err)
 	}
 }
 

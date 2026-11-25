@@ -27,7 +27,7 @@ func newRuleCommand(newAgent func() (agents.Agent, error)) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runConversation(agent, prompt, cmd.InOrStdin(), cmd.OutOrStdout())
+			return runConversation(cmd.Context(), agent, prompt, cmd.InOrStdin(), cmd.OutOrStdout())
 		},
 	}
 	command.AddCommand(newReviewCommand())

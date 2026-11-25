@@ -8,6 +8,7 @@ import (
 )
 
 func TestReviewExecutesConfiguredInterpreters(t *testing.T) {
+	requireReviewSandbox(t)
 	for _, fixture := range []struct{ runtime, name, source string }{
 		{"python3", "check rules.py", `import os,sys
 print("ROOT:"+os.environ["AIFACTORY_PROJECT_DIR"])
@@ -26,6 +27,10 @@ console.log("PASS node");
 				t.Skip(fixture.runtime + " is unavailable")
 			}
 			root := t.TempDir()
+			root, err := filepath.EvalSymlinks(root)
+			if err != nil {
+				t.Fatal(err)
+			}
 			t.Chdir(root)
 			settings := "dir: policy\nrule-agent:\n  dir: checks\nchecks:\n  run: [" + fixture.runtime + ", '" + fixture.name + "', --mode, 'strict mode']\n"
 			writeReviewFixture(t, root, "factory.yaml", settings, 0600)

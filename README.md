@@ -4,7 +4,9 @@ Turn project conventions into documented rules and executable checks. Use Codex 
 
 ## Install
 
-AI Factory supports macOS and Linux. Choose one of these options. Prebuilt downloads do not require Go to install the app. Creating or rebuilding Go rule checkers requires **Go 1.25+**; other checker languages need their own runtime or compiler. To create rules, also install and sign in to **Codex CLI** or **Claude Code**.
+AI Factory supports macOS and Linux. Choose one of these options. Prebuilt downloads do not require Go to install the app. Creating or rebuilding Go rule checkers requires **Go 1.25+**; other checker languages need their own runtime or compiler. Rebuilding the embedded web UI requires **Node.js 22+** and **pnpm 10+**. To create rules, also install and sign in to **Codex CLI** or **Claude Code**.
+
+The [dependency manifest](https://github.com/dacalin/aifactory/blob/HEAD/docs/dependencies.yaml) lists host tools by feature and platform. Update it when a feature adds or changes a host dependency.
 
 The repository is currently private: installation requires a GitHub account with access. Sign in to GitHub in your browser for manual downloads, or run `gh auth login` with the GitHub CLI for terminal downloads.
 
@@ -105,6 +107,7 @@ To run without installing, use `go run . --help` from the cloned repository. To 
 | `aifactory rule "description"` | Create or update a rule through a conversation. |
 | `aifactory rule review [check-id\|all]` | Run one check or all checks (the default) against the current project/worktree. |
 | `aifactory rule review --list` | List available check IDs. |
+| `aifactory serve` | Open the local project manager UI. |
 
 Run from your project directory:
 
@@ -117,6 +120,8 @@ aifactory rule review --list
 ```
 
 Use `aifactory --help`, `aifactory rule --help`, or `aifactory rule review --help` for command details and examples.
+
+`aifactory serve` opens the project manager at `http://127.0.0.1:8787` and starts the browser automatically. Use `--no-browser` to keep it in the terminal. The server listens on loopback only. It stores its global settings and project database under `~/.ai-factory/`. Each project has a configurable default base branch; a task can select another branch at creation, and that selection is retained for its worktree and eventual PR target. Use **Seleccionar…** to open the operating system's folder chooser; Linux desktops need `zenity` or `kdialog`. You can also paste a folder path into the location field.
 
 Rule creation streams progress and supports follow-up messages. Type `/exit` to finish. Review runs the shared checker directly, reports failures, and exits nonzero on failure. It uses the current checkout/worktree, including uncommitted changes; the optional `checks.build` command runs first. The rule name `review` is reserved for this subcommand.
 
@@ -134,7 +139,7 @@ rule-agent:
     go_run: [go, run]
 ```
 
-RuleAgent configures one shared checker through top-level `checks` settings. Commands are argument lists, run from the configured rule directory, and execute without shell parsing. Review appends `all`, a check ID, or `--list` to `checks.run`. The project root is available as `AIFACTORY_PROJECT_DIR`. The app makes no assumptions about language, filenames, extensions, or how to compile checks.
+The top-level `checks` settings configure one shared checker. Commands are argument lists, run from the configured rule directory, and execute without shell parsing. Review appends `all`, a check ID, or `--list` to `checks.run`. The project root is available as `AIFACTORY_PROJECT_DIR`. The app makes no assumptions about language, filenames, extensions, or how to compile checks.
 
 For Python (no build step):
 
@@ -151,13 +156,23 @@ checks:
   run: [./checkrules]
 ```
 
-Existing projects without `checks.run` need it added before using review; ask RuleAgent to configure the runner or add the commands manually.
+If a project has no `checks.run`, add it before using review. RuleAgent can propose the commands to add to `factory.yaml`.
 
-Edit `.ai-factory/prompts/rule-agent.md` to customize the agent. Rules, checker sources, the shared checker entry point, and `INDEX.md` live under `.ai-factory/rules` by default. Every index entry includes a command to run its check. Temporary verification files stay under `.ai-factory/.tmp`. Review uses those generated checkers; a fresh project needs its first rule before it can be reviewed.
+Edit `.ai-factory/prompts/rule-agent.md` to customize the agent. Rules, checker sources, the shared checker entry point, and `INDEX.md` live under `.ai-factory/rules` by default. Every index entry includes a command to run its check. A fresh project needs its first rule before it can be reviewed.
+
+The rule agent, checker build, and checker run execute with filesystem writes scoped to the configured rule directory. The repository remains readable. Tool state, the Go build cache, and temporary files live in the ignored `.tmp` directory inside the rules directory. Apply any changes to the root `factory.yaml` yourself.
+
+The sandbox uses `sandbox-exec` on macOS and requires `bwrap` (Bubblewrap) with user namespaces on Linux. If the OS rejects the sandbox, the command fails before starting the agent or checker. This limit applies to local filesystem writes by the process and its children. Connected services have their own permissions.
 
 ## Develop
 
+See [docs/spec.md](docs/spec.md) for implemented When/Then scenarios,
+[AGENTS.md](AGENTS.md) for contributor guidance, and
+[docs/architecture.md](docs/architecture.md) for package responsibilities,
+dependency boundaries, and the long-lived server/orchestrator lifecycle.
+
 ```sh
+(cd web && pnpm install --frozen-lockfile && pnpm build)
 go test ./...
 go -C .ai-factory/rules test ./...
 go run . rule review
@@ -167,4 +182,4 @@ make release VERSION=v0.1.2
 
 Enable the shared pre-commit hook with `git config core.hooksPath .githooks`.
 
-The Makefile invokes Go directly. `make build` creates the local executable in `bin/`; `make release VERSION=v0.1.2` builds all six macOS/Linux targets and writes binaries, archives, and `SHA256SUMS` under `dist/v0.1.2/`. Release packaging requires Make, Go, `tar`, and either `sha256sum` or `shasum`. `make test` runs the application and checker tests. Model-backed creation requires a configured CLI; automated tests use simulated providers. This repository's rules are project-specific; `init` gives other projects the editable prompt and configuration, without copying these rules.
+The Makefile rebuilds the Vue UI before compiling. `make build` creates the local executable in `bin/`; `make release VERSION=v0.1.2` builds all six macOS/Linux targets and writes binaries, archives, and `SHA256SUMS` under `dist/v0.1.2/`. Release packaging requires Make, Go, Node.js, pnpm, `tar`, and either `sha256sum` or `shasum`. Plain `go build` embeds the checked-in UI assets and does not need Node.js. `make test` runs the application and checker tests. Model-backed creation requires a configured CLI; automated tests use simulated providers. This repository's rules are project-specific; `init` gives other projects the editable prompt and configuration, without copying these rules.

@@ -151,7 +151,7 @@ func (cfg Factory) RulesDir() string {
 }
 
 func (cfg Factory) TemporaryDir() string {
-	return filepath.Join(cfg.Dir, ".tmp")
+	return filepath.Join(cfg.RulesDir(), ".tmp")
 }
 
 func (cfg Factory) RulePromptPath() string {

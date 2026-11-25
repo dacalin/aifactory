@@ -4,11 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/dacalin/aifactory/internal/config"
+	"github.com/dacalin/aifactory/internal/sandbox"
 
 	"github.com/spf13/cobra"
 )
@@ -26,36 +26,52 @@ func runReview(command *cobra.Command, args []string) error {
 	if len(commands.Run) == 0 {
 		return fmt.Errorf("checks.run is not configured in factory.yaml; ask RuleAgent to configure the shared checker")
 	}
-	workspace := filepath.Join(root, cfg.TemporaryDir())
-	if err := os.MkdirAll(workspace, 0755); err != nil {
+	rules, err := sandbox.Directory(cfg.ProjectDir, cfg.RulesDir())
+	if err != nil {
 		return err
 	}
+	workspace, err := sandbox.RuntimeDirectory(rules)
+	if err != nil {
+		return err
+	}
+	rulesRoot, err := os.OpenRoot(rules)
+	if err != nil {
+		return err
+	}
+	defer rulesRoot.Close()
+	runtimeRoot, err := rulesRoot.OpenRoot(filepath.Base(workspace))
+	if err != nil {
+		return err
+	}
+	defer runtimeRoot.Close()
 	temporary, err := os.MkdirTemp(workspace, "review-")
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(temporary)
+	defer runtimeRoot.RemoveAll(filepath.Base(temporary))
 	if len(commands.Build) > 0 {
-		if err := executeChecker(command, cfg, commands.Build, nil, temporary); err != nil {
+		if err := executeChecker(command, root, rules, temporary, commands.Build, nil); err != nil {
 			return fmt.Errorf("build configured checker: %w", err)
 		}
 	}
-	if err := executeChecker(command, cfg, commands.Run, args, temporary); err != nil {
+	if err := executeChecker(command, root, rules, temporary, commands.Run, args); err != nil {
 		return fmt.Errorf("rule review failed: %w", err)
 	}
 	return nil
 }
 
-func executeChecker(command *cobra.Command, cfg config.Factory, argv, args []string, temporary string) error {
-	rules := filepath.Join(cfg.ProjectDir, cfg.RulesDir())
+func executeChecker(command *cobra.Command, root, rules, temporary string, argv, args []string) error {
 	program := argv[0]
 	if !filepath.IsAbs(program) && strings.ContainsRune(program, '/') {
 		program = filepath.Join(rules, program)
 	}
 	arguments := append(append([]string{}, argv[1:]...), args...)
-	process := exec.CommandContext(command.Context(), program, arguments...)
-	process.Dir = rules
-	process.Env = append(os.Environ(), "TMPDIR="+temporary, "AIFACTORY_PROJECT_DIR="+cfg.ProjectDir)
+	process, err := sandbox.Command(command.Context(), rules, rules, program, arguments...)
+	if err != nil {
+		return err
+	}
+	process.Env = append(process.Environ(), "TMPDIR="+temporary, "GOTMPDIR="+temporary,
+		"GOCACHE="+filepath.Join(filepath.Dir(temporary), "go-build"), "AIFACTORY_PROJECT_DIR="+root)
 	process.Stdout = command.OutOrStdout()
 	process.Stderr = command.ErrOrStderr()
 	return process.Run()

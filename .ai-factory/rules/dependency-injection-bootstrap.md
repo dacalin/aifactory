@@ -9,13 +9,15 @@ files `main.go` and `bootstrap.go` are always checked.
 ## Requirement
 
 The composition root is the root-level `bootstrap.go` file, and it must declare
-`package main`. It is the only included file that may directly import a
-project-local concrete implementation package under the configured implementation
-roots. `main.go` must not import a concrete implementation.
+`package main`. It selects and injects the concrete Codex and Claude providers,
+and it is the only included file that may directly import their configured
+package roots. `main.go` must not import a concrete provider.
 
 The checker treats such imports as the measurable dependency-injection wiring
-boundary. Add every package root containing concrete implementations to its
-settings so new kinds of infrastructure remain covered.
+boundary. Provider options in `internal/agents/llm` and shared helpers in
+`internal/agents/llm/runnercli` are not concrete provider roots, so provider
+packages may import them. Add every concrete provider root to the settings when
+introducing another provider.
 
 ## Valid example
 
@@ -23,10 +25,20 @@ settings so new kinds of infrastructure remain covered.
 // bootstrap.go
 package main
 
-import "example.com/project/internal/llm"
+import (
+	"example.com/project/internal/agents/llm"
+	"example.com/project/internal/agents/llm/claude"
+	"example.com/project/internal/agents/llm/codex"
+)
 
-func bootstrap(prompt string) error {
-	return runConversation(&llm.Runner{}, prompt)
+func bootstrap(provider, prompt string) error {
+	options := []llm.Option{llm.WithWritableDirs(".ai-factory/rules")}
+	switch provider {
+	case "claude":
+		return runConversation(claude.NewRunner("", "", options...))
+	default:
+		return runConversation(codex.NewRunner("", "", options...))
+	}
 }
 ```
 
@@ -35,7 +47,7 @@ func bootstrap(prompt string) error {
 package main
 
 func main() {
-	_ = bootstrap("create a rule")
+	_ = bootstrap("codex", "create a rule")
 }
 ```
 
@@ -47,5 +59,5 @@ From the project root, run:
 ./.ai-factory/rules/checkrules dependency-injection-bootstrap
 ```
 
-Configure the source paths, exclusions, and concrete implementation package
-roots in the settings block at the top of the Go source.
+Configure the source paths, exclusions, and concrete provider package roots in
+the settings block at the top of the Go source.

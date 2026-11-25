@@ -6,18 +6,21 @@ export VERSION DIST
 
 TARGETS := darwin_amd64 darwin_arm64 linux_386 linux_amd64 linux_armv7 linux_arm64
 
-.PHONY: build test release
+.PHONY: build web-build test release
 
-build:
+build: web-build
 	@mkdir -p bin
 	$(GO) build -trimpath -buildvcs=false -ldflags "-s -w -X github.com/dacalin/aifactory/internal/commands.Version=$${VERSION#v}" -o "bin/aifactory" .
 
-test:
+web-build:
+	cd web && pnpm install --frozen-lockfile && pnpm build
+
+test: web-build
 	$(GO) test ./...
 	$(GO) -C .ai-factory/rules test ./...
 
 # Release builds need Make, Go, tar and sha256sum or shasum.
-release:
+release: web-build
 	@set -eu; \
 	case "$$VERSION" in dev|""|.|..|*[!A-Za-z0-9._-]*) echo 'Use make release VERSION=vX.Y.Z' >&2; exit 1;; esac; \
 	command -v tar >/dev/null; \

@@ -8,11 +8,27 @@ import (
 )
 
 // Ownership roots and declarations can be adapted to another layout.
-var packageOwnership = struct {
-	Agents, Models string
-	Retired        []string
-	Contracts      []string
-}{"internal/agents", "internal/llm", []string{"internal/ports", "internal/adapters"}, []string{"Agent", "AgentRunner"}}
+type packageOwnershipSettings struct {
+	Agents, Options, SharedCLI string
+	Option, Runner             string
+	Providers                  []string
+	Retired                    []string
+	Contracts                  []string
+}
+
+var packageOwnership = packageOwnershipSettings{
+	Agents:    "internal/agents",
+	Options:   "internal/agents/llm",
+	SharedCLI: "internal/agents/llm/runnercli",
+	Option:    "Option",
+	Runner:    "AgentRunner",
+	Providers: []string{
+		"internal/agents/llm/codex",
+		"internal/agents/llm/claude",
+	},
+	Retired:   []string{"internal/ports", "internal/adapters"},
+	Contracts: []string{"Agent", "AgentRunner"},
+}
 
 func init() { register("package-organization", checkPackageOrganization) }
 
@@ -28,11 +44,9 @@ func checkPackageOrganization(repo *repository) error {
 				issues = append(issues, fmt.Errorf("%s: move retired package source to its responsibility package", file.name))
 			}
 		}
-		for _, root := range []string{packageOwnership.Agents, packageOwnership.Models} {
-			if file.dir == root && file.tree.Name.Name != path.Base(root) {
-				issues = append(issues, fmt.Errorf("%s: expected package %s", file.name, path.Base(root)))
-			}
-		}
+	}
+	for _, root := range packageRoots() {
+		issues = append(issues, checkPackageRoot(files, root))
 	}
 	definitions := repo.types[packageOwnership.Agents]
 	for _, name := range packageOwnership.Contracts {
@@ -50,8 +64,46 @@ func checkPackageOrganization(repo *repository) error {
 	} else if _, ok := definition.spec.Type.(*ast.StructType); !ok {
 		issues = append(issues, fmt.Errorf("RuleAgent must be a struct"))
 	}
-	if len(repo.types[packageOwnership.Models]) == 0 {
-		issues = append(issues, fmt.Errorf("%s must own model implementations", packageOwnership.Models))
+	if _, exists := repo.types[packageOwnership.Options][packageOwnership.Option]; !exists {
+		issues = append(issues, fmt.Errorf("%s must own provider option %s", packageOwnership.Options, packageOwnership.Option))
+	}
+	for _, root := range packageOwnership.Providers {
+		if !providerImplementsRunner(repo, root) {
+			issues = append(issues, fmt.Errorf("%s must declare a struct that asserts %s.%s", root, path.Base(packageOwnership.Agents), packageOwnership.Runner))
+		}
 	}
 	return errors.Join(issues...)
+}
+
+func packageRoots() []string {
+	roots := []string{packageOwnership.Agents, packageOwnership.Options, packageOwnership.SharedCLI}
+	return append(roots, packageOwnership.Providers...)
+}
+
+func checkPackageRoot(files []*sourceFile, root string) error {
+	found := false
+	var issues []error
+	for _, file := range files {
+		if file.dir != root {
+			continue
+		}
+		found = true
+		if file.tree.Name.Name != path.Base(root) {
+			issues = append(issues, fmt.Errorf("%s: expected package %s", file.name, path.Base(root)))
+		}
+	}
+	if !found {
+		issues = append(issues, fmt.Errorf("%s must contain Go source", root))
+	}
+	return errors.Join(issues...)
+}
+
+func providerImplementsRunner(repo *repository, root string) bool {
+	target := repo.packagePath(packageOwnership.Agents) + "." + packageOwnership.Runner
+	for name, definition := range repo.types[root] {
+		if _, ok := definition.spec.Type.(*ast.StructType); ok && repo.hasAssertion(root, name, target) {
+			return true
+		}
+	}
+	return false
 }

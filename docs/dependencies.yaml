@@ -1,0 +1,104 @@
+# Host tools used by AI Factory. Platform keys follow Go's GOOS values.
+# Select the groups for the requested features. In one_of groups, choose one tool.
+# Language packages remain in go.mod and web/pnpm-lock.yaml.
+schema_version: 1
+
+groups:
+  binary:
+    description: Run the prebuilt application.
+    requires: []
+
+  project_workspace:
+    description: Register and inspect Git repositories, list branches, and manage worktrees.
+    requires:
+      - command: git
+
+  sandbox:
+    description: Run the rule agent or rule review with filesystem restrictions.
+    platforms:
+      darwin:
+        requires:
+          - command: /usr/bin/sandbox-exec
+            source: system
+            deprecated: true
+      linux:
+        requires:
+          - command: bwrap
+            package: bubblewrap
+            required_flags: [--unshare-user, --disable-userns]
+            note: The host must permit user namespaces.
+
+  rule_authoring:
+    description: Create and edit rules. Use the provider selected in factory.yaml.
+    includes: [sandbox]
+    one_of:
+      - command: codex
+        note: Authenticate before use.
+      - command: claude
+        note: Authenticate before use.
+
+  rule_review:
+    description: Run the build and review commands selected in factory.yaml.
+    includes: [sandbox]
+    note: Install the configured checker runtimes. This repository uses the go_build group for its checker.
+
+  go_build:
+    description: Build the Go application or this repository's Go checker.
+    requires:
+      - command: go
+        minimum_version: "1.25.0"
+
+  web_build:
+    description: Rebuild the embedded web assets.
+    requires:
+      - command: node
+        minimum_version: "22.12.0"
+      - command: pnpm
+        minimum_version: "10.0.0"
+        ci_version: "10.33.3"
+
+  source_build:
+    description: Run make build or make test.
+    includes: [go_build, web_build]
+    requires:
+      - command: make
+
+  release:
+    description: Run make release and package binary archives.
+    includes: [source_build]
+    requires:
+      - command: tar
+    one_of:
+      - command: sha256sum
+      - command: shasum
+
+  release_download:
+    description: Download a private release from the terminal.
+    requires:
+      - command: gh
+        note: Requires an authenticated GitHub account with repository access.
+      - command: tar
+
+  desktop_folder_picker:
+    description: Open the native folder picker. A path can also be entered manually.
+    platforms:
+      darwin:
+        requires:
+          - command: osascript
+            source: system
+      linux:
+        one_of:
+          - command: zenity
+          - command: kdialog
+
+  desktop_browser_launch:
+    description: Open the project manager in the default browser automatically.
+    platforms:
+      darwin:
+        requires:
+          - command: open
+            source: system
+      linux:
+        requires:
+          - command: xdg-open
+            package: xdg-utils

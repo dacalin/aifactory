@@ -128,23 +128,30 @@ func (repo *repository) hasAssertion(dir, implementation, target string) bool {
 		if file.test || file.dir != dir {
 			continue
 		}
-		for _, declaration := range file.tree.Decls {
-			gen, ok := declaration.(*ast.GenDecl)
-			if !ok || gen.Tok != token.VAR {
+		if repo.hasAssertionInFile(file, implementation, target) {
+			return true
+		}
+	}
+	return false
+}
+
+func (repo *repository) hasAssertionInFile(file *sourceFile, implementation, target string) bool {
+	for _, declaration := range file.tree.Decls {
+		gen, ok := declaration.(*ast.GenDecl)
+		if !ok || gen.Tok != token.VAR {
+			continue
+		}
+		for _, specification := range gen.Specs {
+			spec := specification.(*ast.ValueSpec)
+			if repo.typeName(file, spec.Type) != target {
 				continue
 			}
-			for _, specification := range gen.Specs {
-				spec := specification.(*ast.ValueSpec)
-				if repo.typeName(file, spec.Type) != target {
+			for index, name := range spec.Names {
+				if name.Name != "_" || index >= len(spec.Values) {
 					continue
 				}
-				for index, name := range spec.Names {
-					if name.Name != "_" || index >= len(spec.Values) {
-						continue
-					}
-					if assertedType(spec.Values[index]) == implementation {
-						return true
-					}
+				if assertedType(spec.Values[index]) == implementation {
+					return true
 				}
 			}
 		}

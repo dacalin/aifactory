@@ -1,6 +1,9 @@
 .ai-factory/rules/checkrules
 .ai-factory/.tmp/
+.ai-factory/rules/.tmp/
 
 # Release archives are published as GitHub release assets.
 /dist/
 /bin/
+/web/node_modules/
+/.pnpm-store/

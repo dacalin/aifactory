@@ -10,7 +10,10 @@ var bootstrapSettings = struct {
 	File, Function      string
 	ImplementationRoots []string
 }{
-	"bootstrap.go", "bootstrap", []string{"internal/llm"},
+	"bootstrap.go", "bootstrap", []string{
+		"internal/agents/llm/codex",
+		"internal/agents/llm/claude",
+	},
 }
 
 func init() { register("dependency-injection-bootstrap", checkBootstrap) }

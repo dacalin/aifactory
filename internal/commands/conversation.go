@@ -2,17 +2,28 @@ package commands
 
 import (
 	"bufio"
+	"context"
+	"errors"
 	"fmt"
 	"io"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/dacalin/aifactory/internal/agents"
 )
 
-func runConversation(agent agents.Agent, prompt string, input io.Reader, output io.Writer) error {
+func runConversation(ctx context.Context, agent agents.Agent, prompt string, input io.Reader, output io.Writer) (err error) {
+	if closer, ok := agent.(io.Closer); ok {
+		defer func() {
+			if cleanupErr := closer.Close(); cleanupErr != nil {
+				err = errors.Join(err, fmt.Errorf("clean up rule session: %w", cleanupErr))
+			}
+		}()
+	}
 	onMessage := func(message string) { fmt.Fprintln(output, message) }
-	_, err := agent.Converse(prompt, onMessage)
-	if err != nil {
+	if err := converseTurn(ctx, agent, prompt, onMessage); err != nil {
 		return err
 	}
 	scanner := bufio.NewScanner(input)
@@ -29,9 +40,15 @@ func runConversation(agent agents.Agent, prompt string, input io.Reader, output 
 		if prompt == "" {
 			continue
 		}
-		_, err = agent.Converse(prompt, onMessage)
-		if err != nil {
+		if err := converseTurn(ctx, agent, prompt, onMessage); err != nil {
 			return err
 		}
 	}
+}
+
+func converseTurn(ctx context.Context, agent agents.Agent, prompt string, onMessage func(string)) error {
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	_, err := agent.ConverseContext(ctx, prompt, onMessage)
+	return err
 }

@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,9 +15,15 @@ import (
 
 type recordingRunner struct {
 	prompts []string
+	closed  bool
 }
 
-func (runner *recordingRunner) Run(_ string, prompt string, onMessage func(string)) (string, error) {
+func (runner *recordingRunner) Close() error {
+	runner.closed = true
+	return nil
+}
+
+func (runner *recordingRunner) Run(_ context.Context, _ string, prompt string, onMessage func(string)) (string, error) {
 	runner.prompts = append(runner.prompts, prompt)
 	reply := fmt.Sprintf("Reply %d", len(runner.prompts))
 	onMessage(reply)
@@ -35,7 +42,7 @@ func TestInitPreservesExistingConfiguration(t *testing.T) {
 				return nil, err
 			}
 			return agents.NewRuleAgent(runner, cfg)
-		})
+		}, nil)
 		command.SetArgs([]string{"init"})
 		command.SetOut(&bytes.Buffer{})
 		if err := command.Execute(); err != nil {
@@ -70,7 +77,7 @@ func TestRuleCommandStreamsMultipleTurns(t *testing.T) {
 			return nil, err
 		}
 		return agents.NewRuleAgent(runner, cfg)
-	})
+	}, nil)
 	command.SetArgs([]string{"rule", "Create", "a", "rule"})
 	command.SetIn(strings.NewReader("\nApply it to all paths.\n/exit\n"))
 	command.SetOut(&output)
@@ -79,6 +86,9 @@ func TestRuleCommandStreamsMultipleTurns(t *testing.T) {
 	}
 	if len(runner.prompts) != 2 {
 		t.Fatalf("expected two turns, got %d", len(runner.prompts))
+	}
+	if !runner.closed {
+		t.Fatal("rule conversation did not close its runner")
 	}
 	if !strings.Contains(runner.prompts[0], "Create a rule") || runner.prompts[1] != "Apply it to all paths." {
 		t.Fatalf("unexpected prompts %q", runner.prompts)
@@ -104,7 +114,7 @@ func TestHelpAndInvalidArgumentsDoNotInvokeTheAgent(t *testing.T) {
 					return nil, err
 				}
 				return agents.NewRuleAgent(runner, cfg)
-			})
+			}, nil)
 			command.SetArgs(args)
 			command.SetOut(&bytes.Buffer{})
 			command.SetErr(&bytes.Buffer{})

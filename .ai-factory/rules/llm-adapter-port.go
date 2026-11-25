@@ -10,7 +10,7 @@ import (
 )
 
 // Model integration locations and recognized provider entry points.
-var modelRoot = "internal/llm"
+var modelRoot = "internal/agents/llm"
 var modelCLIs = map[string]bool{"codex": true, "claude": true, "gemini": true, "ollama": true, "aider": true, "opencode": true, "cursor-agent": true}
 var modelSDKPrefixes = []string{
 	"github.com/openai/", "github.com/anthropics/", "github.com/sashabaranov/go-openai",

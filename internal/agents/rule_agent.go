@@ -1,7 +1,9 @@
 package agents
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,16 +38,27 @@ func NewRuleAgent(runner AgentRunner, cfg config.Factory) (*RuleAgent, error) {
 	return &RuleAgent{
 		runner:       runner,
 		projectDir:   cfg.ProjectDir,
-		instructions: fmt.Sprintf("%s\n\nProject configuration (YAML, paths relative to the project root):\n%s\nConfigured rule directory: %q\nConfigured temporary workspace: %q\n\nUser request:\n", instructions, settings, cfg.RulesDir(), cfg.TemporaryDir()),
+		instructions: fmt.Sprintf("%s\n\nProject configuration (YAML, paths relative to the project root):\n%s\nConfigured rule directory: %q\nConfigured temporary workspace: %q\nUse the session directory in TMPDIR for temporary files.\n\nOnly the configured rule directory is writable. If the root factory.yaml needs changes, describe the exact settings for the user to apply.\n\nUser request:\n", instructions, settings, cfg.RulesDir(), cfg.TemporaryDir()),
 	}, nil
 }
 
+func (agent *RuleAgent) Close() error {
+	if closer, ok := agent.runner.(io.Closer); ok {
+		return closer.Close()
+	}
+	return nil
+}
+
 func (agent *RuleAgent) Converse(prompt string, onMessage func(string)) (string, error) {
+	return agent.ConverseContext(context.Background(), prompt, onMessage)
+}
+
+func (agent *RuleAgent) ConverseContext(ctx context.Context, prompt string, onMessage func(string)) (string, error) {
 	input := prompt
 	if !agent.started {
 		input = agent.instructions + prompt + "\n"
 	}
-	reply, err := agent.runner.Run(agent.projectDir, input, onMessage)
+	reply, err := agent.runner.Run(ctx, agent.projectDir, input, onMessage)
 	if err == nil {
 		agent.started = true
 	}

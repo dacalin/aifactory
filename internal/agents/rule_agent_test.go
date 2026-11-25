@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -15,7 +16,7 @@ type recordingRunner struct {
 	fail    bool
 }
 
-func (runner *recordingRunner) Run(_ string, prompt string, onMessage func(string)) (string, error) {
+func (runner *recordingRunner) Run(_ context.Context, _ string, prompt string, onMessage func(string)) (string, error) {
 	runner.prompts = append(runner.prompts, prompt)
 	if runner.fail {
 		runner.fail = false

@@ -19,7 +19,7 @@ func TestCommandHelpExplainsUsageAndSubcommands(t *testing.T) {
 		{[]string{"init", "--help"}, []string{"Existing configuration and edited prompts are preserved", "<dir>/prompts/rule-agent.md", "aifactory init"}},
 	} {
 		t.Run(strings.Join(test.args, " "), func(t *testing.T) {
-			command := NewRootCommand(func() (agents.Agent, error) { t.Fatal("help constructed an agent"); return nil, nil })
+			command := NewRootCommand(func() (agents.Agent, error) { t.Fatal("help constructed an agent"); return nil, nil }, nil)
 			var output bytes.Buffer
 			command.SetOut(&output)
 			command.SetArgs(test.args)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -64,24 +65,48 @@ func findRoot(requested string) (string, error) {
 	if requested != "" {
 		return filepath.Abs(requested)
 	}
+	if managedRoot := strings.TrimSpace(os.Getenv("AIFACTORY_PROJECT_DIR")); managedRoot != "" {
+		return filepath.Abs(managedRoot)
+	}
 	current, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
-	fallback := ""
-	for {
-		if _, err := os.Stat(filepath.Join(current, "factory.yaml")); err == nil {
-			return current, nil
+	if root, found, err := ancestorWith(current, "factory.yaml"); err != nil {
+		return "", err
+	} else if found {
+		return root, nil
+	}
+	if executable, err := os.Executable(); err == nil {
+		if resolved, resolveErr := filepath.EvalSymlinks(executable); resolveErr == nil {
+			executable = resolved
 		}
-		if _, err := os.Stat(filepath.Join(current, "go.mod")); err == nil && fallback == "" {
-			fallback = current
+		if root, found, findErr := ancestorWith(filepath.Dir(executable), "factory.yaml"); findErr != nil {
+			return "", findErr
+		} else if found {
+			return root, nil
+		}
+	}
+	if root, found, err := ancestorWith(current, "go.mod"); err != nil {
+		return "", err
+	} else if found {
+		return root, nil
+	}
+	return "", fmt.Errorf("project root not found; pass --root")
+}
+
+func ancestorWith(start, name string) (string, bool, error) {
+	current, err := filepath.Abs(start)
+	if err != nil {
+		return "", false, err
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(current, name)); err == nil {
+			return current, true, nil
 		}
 		parent := filepath.Dir(current)
 		if parent == current {
-			if fallback != "" {
-				return fallback, nil
-			}
-			return "", fmt.Errorf("project root not found; pass --root")
+			return "", false, nil
 		}
 		current = parent
 	}

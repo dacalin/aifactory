@@ -9,10 +9,16 @@ import (
 	"os/exec"
 )
 
-// Each source/target pair covers descendant packages.
-var forbiddenDependencies = []struct{ From, To string }{
-	{"internal/agents", "internal/llm"},
-	{"internal/llm", "internal/commands"},
+// Targets always cover descendant packages. Sources can be exact package roots
+// or whole package trees so provider helpers can remain usable by providers.
+type dependencyBoundary struct {
+	From, To        string
+	FromDescendants bool
+}
+
+var forbiddenDependencies = []dependencyBoundary{
+	{"internal/agents", "internal/agents/llm", false},
+	{"internal/agents/llm", "internal/commands", true},
 }
 
 func init() { register("go-dependency-direction", checkDependencies) }
@@ -40,11 +46,19 @@ func checkDependencies(repo *repository) error {
 		}
 		for _, dependency := range pkg.Imports {
 			for _, boundary := range forbiddenDependencies {
-				if within(pkg.ImportPath, repo.packagePath(boundary.From)) && within(dependency, repo.packagePath(boundary.To)) {
+				if dependencySourceMatches(repo, pkg.ImportPath, boundary) && within(dependency, repo.packagePath(boundary.To)) {
 					issues = append(issues, fmt.Errorf("%s must not import %s", pkg.ImportPath, dependency))
 				}
 			}
 		}
 	}
 	return errors.Join(issues...)
+}
+
+func dependencySourceMatches(repo *repository, source string, boundary dependencyBoundary) bool {
+	root := repo.packagePath(boundary.From)
+	if boundary.FromDescendants {
+		return within(source, root)
+	}
+	return source == root
 }
